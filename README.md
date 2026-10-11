@@ -66,7 +66,8 @@ bash -c "curl -fsSL https://raw.githubusercontent.com/lxingrui/lean-measure/main
 | 变量 | 作用 |
 |---|---|
 | `LCM_TARGETS` | 例如 `mathlib` 只跑一个 |
-| `LCM_OAI_SUBTREE` | 换 OAI 子树 |
+| `LCM_OAI_SUBTREE` | 换 OAI 子树（**目录路径**，如 `OAI/Analysis/Crouzeix`） |
+| `LCM_OAI_ROOT_MODULE` | 该子树的**入口模块**，默认 `<subtree>.Main` |
 | `LCM_OAI_FULL=1` | 编译整个 OAI（需 ~110 GB，默认拒绝） |
 | `LCM_WORK` | 换工作目录（默认 `/work`） |
 | `JOBS` | 手动指定并发 |
@@ -75,6 +76,20 @@ bash -c "curl -fsSL https://raw.githubusercontent.com/lxingrui/lean-measure/main
 | `LCM_RUNPOD_API_KEY` | 给了就真正删除 Pod（否则 `kill 1` 让容器退出） |
 | `LCM_PUSH_REFS=1` | 连 `refs.tsv` 中间产物一起推 |
 | `LCM_RESULT_BRANCH` | 指定结果分支（默认 `results-<主机名>-<时间戳>`） |
+
+### 为什么 OAI 要分两个变量
+
+Lean 里 `import` 的是**模块**而不是目录。`OAI/Analysis/Crouzeix` 是目录
+（含 90 个 `.lean`，入口是 `Main.lean`），并没有 `Crouzeix.lean`，
+所以：
+
+- `lake build OAI.Analysis.Crouzeix` → `error: no such file or directory:
+  .../OAI/Analysis/Crouzeix.lean`
+- 正确做法是编译入口模块 `OAI.Analysis.Crouzeix.Main`
+
+`run.sh` 现在会在 `deps` 阶段提前校验：既没有 `<subtree>.lean`
+也没有 `<subtree>/Main.lean` 就立刻失败，并列出该目录现有内容 +
+可复制的修复命令。
 
 ## 产物
 
