@@ -576,12 +576,12 @@ $MOUNTS"
       # mathlib），而且失败信息都希望能传回来。只记录 FAILED。
       for t in $TARGETS; do
         say "════════ 目标: $t ════════"
-        local tf=0
+        tf=0                      # 注意：这里在 case 块里，不能用 local
         run_stage "deps-$t"    do_deps    "$t" || tf=1
         run_stage "build-$t"   do_build   "$t" || tf=1
         run_stage "measure-$t" do_measure "$t" || tf=1
         do_upload >/dev/null 2>&1 || true
-        if [ $tf -eq 0 ]; then
+        if [ "${tf:-0}" -eq 0 ]; then
           say "════════ $t 完成 ════════"
         else
           say "════════ $t 未完成（详情见 $LOGS/*$t.log）════════"
