@@ -124,6 +124,38 @@ LEAN_NUM_THREADS="$JOBS" lake build Mathlib || die
 ```
 **真机佐证**：修好后真机出现 `Build completed successfully (9038 jobs).`
 
+### B-1b OAI 子树：`lake build` 要的是模块，不是目录
+
+🟡 **已修 · 仅本地模拟**
+
+**症状（真机）**：
+```
+[oai] 编译 OAI.Analysis.Crouzeix（LEAN_NUM_THREADS=7）
+✖ [2/2] Running OAI.Analysis.Crouzeix
+error: no such file or directory (error code: 2)
+  file: /work/oai/lean/OAI/Analysis/Crouzeix.lean
+```
+
+**根因**：`OAI/Analysis/Crouzeix` 是**目录**（含 90 个 `.lean`），
+没有 `Crouzeix.lean` 这个文件。Lean 里 `import` 的是**模块**，不是目录。
+我把"目录路径"直接当成了"模块名"。
+
+**修法**：区分两个概念 ——
+
+| 用途 | 值 |
+|---|---|
+| 编译目标 | **入口模块** `OAI.Analysis.Crouzeix.Main`（OAI 各领域以 `Main.lean` 为入口） |
+| 测量根模块 | 同上 |
+
+- 新增 `OAI_ROOT_MODULE`（默认 `<subtree>.Main`，可用 `LCM_OAI_ROOT_MODULE` 覆盖）
+- 编译改为 `lake build ""`（入口模块一定存在，且会传递编译其全部依赖）
+- `deps` 阶段**提前校验**目标：既没有 `<subtree>.lean` 也没有 `<subtree>/Main.lean`
+  就立刻失败，并列出该目录现有内容 + 可复制的修复命令，而不是等到编译到一半才发现
+
+**本机实测**：mock 出 `OAI/Analysis/Crouzeix/Main.lean` 后，
+`import OAI.Analysis.Crouzeix.Main` 与 `#eval ... OAI.Analysis.Crouzeix.Main` 都正确，
+全流程退出码 0，产物推送成功。
+
 ### B-2 Lean 版本与项目 `lean-toolchain` 不一致
 
 ⚪ **仅记录** ｜ 未处理

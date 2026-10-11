@@ -40,6 +40,14 @@ FEISHU_WEBHOOK="${LCM_FEISHU_WEBHOOK:-${FEISHU_WEBHOOK:-}}"
 FEISHU_SECRET="${LCM_FEISHU_SECRET:-${FEISHU_SECRET:-}}"
 GH_REPO="${LCM_GH_REPO:-lxingrui/lean-measure}"
 OAI_SUBTREE="${LCM_OAI_SUBTREE:-OAI/Analysis/Crouzeix}"
+# OAI 的入口模块。
+# Lean 里 import 的是【模块】而不是目录：OAI/Analysis/Crouzeix 是目录，
+# 没有 Crouzeix.lean，所以 `lake build OAI.Analysis.Crouzeix` 会报
+# "no such file or directory: .../Crouzeix.lean"（真机踩过）。
+#   · 编译目标 = 目录对应的模块前缀 OAI.Analysis.Crouzeix（lake 会编译该目录全部模块）
+#   · 测量根模块 = 入口文件 OAI.Analysis.Crouzeix.Main
+# 若子树没有 Main.lean，preflight 会列出现有模块供选择。可用 LCM_OAI_ROOT_MODULE 覆盖。
+OAI_ROOT_MODULE="${LCM_OAI_ROOT_MODULE:-$(echo "$OAI_SUBTREE" | tr '/' '.').Main}"
 OAI_FULL="${LCM_OAI_FULL:-0}"
 
 _raw="${LCM_TARGETS:-${TARGETS:-mathlib,oai}}"
@@ -299,6 +307,22 @@ do_deps() {
     cd "$WORK/oai/lean" || die "[$t] 没有 $WORK/oai/lean"
     say "[$t] lake update（42 个依赖 + 自动打 24 个兼容补丁）"
     lake update || die "[$t] lake update 失败"
+
+    # 校验子树目标 —— 这一步能避免"编译到一半才发现目标不存在"
+    if [ "$OAI_FULL" != "1" ]; then
+      if [ -f "$OAI_SUBTREE.lean" ]; then
+        say "[$t] 目标确认: $OAI_SUBTREE.lean 存在"
+      elif [ -f "$OAI_SUBTREE/Main.lean" ]; then
+        say "[$t] 目标确认: $OAI_SUBTREE/ 目录存在（入口 $OAI_ROOT_MODULE）"
+      else
+        say "[$t] ❌ 找不到 $OAI_SUBTREE.lean，也没有 $OAI_SUBTREE/Main.lean"
+        say "[$t]    该子树的现有内容（前 20 项）:"
+        ls -1 "$OAI_SUBTREE" 2>/dev/null | head -20 | sed 's/^/      /'
+        say "[$t]    Lean 里 import 的是模块不是目录，请指定到具体入口，例如"
+        say "[$t]      LCM_OAI_SUBTREE=OAI/Analysis/Crouzeix  LCM_OAI_ROOT_MODULE=OAI.Analysis.Crouzeix.Main"
+        die "[$t] 子树目标无效: $OAI_SUBTREE"
+      fi
+    fi
   fi
 }
 
@@ -319,9 +343,11 @@ do_build() {
     cd "$WORK/oai/lean" || die "[$t] 目录不存在"
     say "[$t] 确保 pinned mathlib 缓存"
     ( cd .lake/packages/mathlib && lake exe cache get ) || say "[$t] ⚠️ mathlib 缓存失败"
+    # 编译【入口模块】而不是目录前缀：
+    #   目录前缀（OAI.Analysis.Crouzeix）没有同名 .lean 文件，能否解析成整目录是未验证的假设；
+    #   入口模块（OAI.Analysis.Crouzeix.Main）一定存在，且会传递编译它依赖的全部模块。
     local tgt
-    if [ "$OAI_FULL" = "1" ]; then tgt="OAI"
-    else tgt="$(echo "$OAI_SUBTREE" | tr '/' '.')"; fi
+    if [ "$OAI_FULL" = "1" ]; then tgt="OAI"; else tgt="$OAI_ROOT_MODULE"; fi
     say "[$t] 编译 $tgt（LEAN_NUM_THREADS=$JOBS）"
     LEAN_NUM_THREADS="$JOBS" lake build "$tgt" || die "[$t] 编译失败"
   fi
@@ -339,7 +365,7 @@ do_measure() {
   if [ "$t" = "mathlib" ]; then
     PROJ="$WORK/mathlib4"; ROOT_MODULE="Mathlib"
   else
-    PROJ="$WORK/oai/lean"; ROOT_MODULE="$(echo "$OAI_SUBTREE" | tr '/' '.')"
+    PROJ="$WORK/oai/lean"; ROOT_MODULE="$OAI_ROOT_MODULE"
     [ "$OAI_FULL" = "1" ] && ROOT_MODULE="OAI"
   fi
 

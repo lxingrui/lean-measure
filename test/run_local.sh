@@ -107,8 +107,12 @@ done
 mkdir -p "$WORK/oai/lean/.lake/packages"
 ( cd "$WORK/oai/lean" && git init -q && git config user.email t@t && git config user.name t \
   && echo x > .keep && git add -A && git commit -q -m lean )
+# 造出真实子树结构，让 deps 的目标校验能通过：
+#   OAI/Analysis/Crouzeix 是目录，入口是 Main.lean（与真实仓库一致）
+mkdir -p "$WORK/oai/lean/OAI/Analysis/Crouzeix"
+echo 'import Mathlib' > "$WORK/oai/lean/OAI/Analysis/Crouzeix/Main.lean"
 mkdir -p "$WORK/mathlib4/.lake/build/lib/lean"
-echo "mock 项目就绪"
+echo "mock 项目就绪（含 OAI/Analysis/Crouzeix/Main.lean）"
 
 # ── 4. 运行 ────────────────────────────────────────────────────
 export LCM_WORK="$WORK"
