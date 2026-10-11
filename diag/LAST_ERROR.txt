@@ -1,0 +1,64 @@
+阶段: build-oai
+退出码: 1
+时间: 2026-10-11T08:02:34Z
+目标: mathlib oai
+主机: fbfbce1dc4f7  vCPU=8  MEM=124G
+工作目录: /work
+
+===== build-oai 日志尾部 80 行 =====
+[2026-10-11T08:02:12Z] [oai] 确保 pinned mathlib 缓存
+info: plausible: cloning https://github.com/leanprover-community/plausible
+info: plausible: checking out revision '118aa17ee84656b8bd727fef7c458ee8c833385c'
+info: LeanSearchClient: cloning https://github.com/leanprover-community/LeanSearchClient
+info: LeanSearchClient: checking out revision 'ddf04cf3949fa556442341e87d47f9f6e6074707'
+info: importGraph: cloning https://github.com/leanprover-community/import-graph
+info: importGraph: checking out revision 'e928b72544873815af278d38681b31c0293588e3'
+info: proofwidgets: cloning https://github.com/leanprover-community/ProofWidgets4
+info: proofwidgets: checking out revision '106ff4fafc74ef4ac99d81dbf3ab399118f497a5'
+info: aesop: cloning https://github.com/leanprover-community/aesop
+info: aesop: checking out revision '355695d523e41d0554926416cba2a2b3544fbbc9'
+info: Qq: cloning https://github.com/leanprover-community/quote4
+info: Qq: checking out revision '6a489d9af5d0c47e5b259e2e8bcdfc1811b5a259'
+info: batteries: cloning https://github.com/leanprover-community/batteries
+info: batteries: checking out revision 'f2effa3d803fda822b1f97b806c47cf2adfbcbc2'
+info: Cli: cloning https://github.com/leanprover/lean4-cli
+info: Cli: checking out revision 'e92c9f15fdfacc8536f31cfb3b7ad26c3c8cd204'
+✔ [12/42] Built Batteries.Tactic.OpenPrivate (492ms)
+✔ [41/42] Built Batteries.Tactic.OpenPrivate:c.o (574ms)
+Current branch: HEAD
+Using cache from origin: (some leanprover-community/mathlib4)
+Decompressing 377 already-cached file(s) (8531 already decompressed)
+No files to download
+Decompressed 377 already-cached file(s)
+Completed successfully in 963 ms!
+[2026-10-11T08:02:32Z] [oai] 编译 OAI.Analysis.Crouzeix（LEAN_NUM_THREADS=7）
+warning: PrimeNumberTheoremAnd: repository '/work/oai/lean/.lake/packages/PrimeNumberTheoremAnd' has local changes
+warning: belyi: repository '/work/oai/lean/.lake/packages/belyi' has local changes
+warning: formal-schemes: repository '/work/oai/lean/.lake/packages/formal-schemes' has local changes
+warning: elliptic-curves: repository '/work/oai/lean/.lake/packages/elliptic-curves' has local changes
+warning: tempered-fundamental-groups: repository '/work/oai/lean/.lake/packages/tempered-fundamental-groups' has local changes
+warning: oka: repository '/work/oai/lean/.lake/packages/oka' has local changes
+warning: orbicurve-cores: repository '/work/oai/lean/.lake/packages/orbicurve-cores' has local changes
+warning: pi1: repository '/work/oai/lean/.lake/packages/pi1' has local changes
+warning: heights: repository '/work/oai/lean/.lake/packages/heights' has local changes
+warning: genl: repository '/work/oai/lean/.lake/packages/genl' has local changes
+warning: tate-curves-theta: repository '/work/oai/lean/.lake/packages/tate-curves-theta' has local changes
+warning: iut: repository '/work/oai/lean/.lake/packages/iut' has local changes
+warning: gromov: repository '/work/oai/lean/.lake/packages/gromov' has local changes
+warning: SphereEversion: repository '/work/oai/lean/.lake/packages/SphereEversion' has local changes
+warning: schoenflies-lean: repository '/work/oai/lean/.lake/packages/schoenflies-lean' has local changes
+warning: ClassFieldTheory: repository '/work/oai/lean/.lake/packages/ClassFieldTheory' has local changes
+warning: AINTLIB: repository '/work/oai/lean/.lake/packages/AINTLIB' has local changes
+warning: AbsorptionCutoff: repository '/work/oai/lean/.lake/packages/AbsorptionCutoff' has local changes
+warning: StrongPNT: repository '/work/oai/lean/.lake/packages/StrongPNT' has local changes
+warning: carleson: repository '/work/oai/lean/.lake/packages/carleson' has local changes
+warning: rellich-kondrachov: repository '/work/oai/lean/.lake/packages/rellich-kondrachov' has local changes
+warning: Zeta3Irrational: repository '/work/oai/lean/.lake/packages/Zeta3Irrational' has local changes
+warning: fixed-point-theorems: repository '/work/oai/lean/.lake/packages/fixed-point-theorems' has local changes
+✖ [2/2] Running OAI.Analysis.Crouzeix
+error: no such file or directory (error code: 2)
+  file: /work/oai/lean/OAI/Analysis/Crouzeix.lean
+Some required targets logged failures:
+- OAI.Analysis.Crouzeix
+error: build failed
+[2026-10-11T08:02:34Z] 失败: [oai] 编译失败
