@@ -78,6 +78,9 @@ START_EPOCH=$(date +%s)
 elapsed() { echo $(( $(date +%s) - START_EPOCH )); }
 fmt_dur() { local s=$1; printf '%dm%02ds' $((s/60)) $((s%60)); }
 
+# 主机标识（结果/诊断分支名都用它）
+HOST_TAG="$(hostname 2>/dev/null | tr -cd 'a-zA-Z0-9' | head -c 12)"; [ -z "$HOST_TAG" ] && HOST_TAG=pod
+
 # ════════════════════════════════════════════════════════════════
 # 通知
 # ════════════════════════════════════════════════════════════════
@@ -183,24 +186,74 @@ mark_progress() {
 run_stage() {
   local name="$1"; shift
   local t0; t0=$(date +%s)
+  local log="$LOGS/$name.log"
   say "==> $name"
-  if ! "$@" 2>&1 | tee -a "$LOGS/$name.log"; then
+
+  # ⚠️ 不要写成 `if ! "$@" 2>&1 | tee ...` —— 那样测的是 tee 的退出码，
+  #    tee 永远成功，于是失败永远检不出来（真机踩过：measure 失败却报"完成"）。
+  #    必须先捕获命令自身的退出码，再 tee。
+  local rc=0
+  ( "$@" ) > >(tee -a "$log") 2>&1 || rc=$?
+
+  if [ "$rc" -ne 0 ]; then
     local d=$(( $(date +%s) - t0 ))
+    say "──── $name 失败（退出码 $rc），日志尾部 ────"
+    tail -50 "$log" 2>/dev/null | sed 's/^/  | /'
+    say "────────────────────────────────────────────"
+    write_error_report "$name" "$rc"
     mark_progress "$name" failed
-    notify fail "lean-measure 失败" \
-      "阶段: $name
+    notify fail "lean-measure 失败: $name" \
+      "退出码: $rc
 耗时: $(fmt_dur $d)（累计 $(fmt_dur "$(elapsed)")）
 目标: $TARGETS${OAI_SUBTREE:+  subtree=$OAI_SUBTREE}
 
-最近日志:
-$(tail -n 15 "$LOGS/$name.log" 2>/dev/null || echo '(无)')"
-    die "$name 阶段失败，详见 $LOGS/$name.log"
+日志尾部（完整日志见仓库 logs/$name.log）:
+$(tail -40 "$log" 2>/dev/null || echo '(无)')"
+    die "$name 阶段失败（退出码 $rc），详见 $log"
   fi
+
   local d=$(( $(date +%s) - t0 ))
   notify ok "阶段完成: $name" \
     "耗时: $(fmt_dur $d)（累计 $(fmt_dur "$(elapsed)")）
 目标: $TARGETS"
   mark_progress "$name" done
+}
+
+# 把失败现场单独写一份，并立刻单独推一次日志 ——
+# 即使后面的上传逻辑有问题，诊断信息也已经在仓库里了
+write_error_report() {
+  local name="$1" rc="$2"
+  mkdir -p "$WORK/diag"
+  {
+    echo "阶段: $name"
+    echo "退出码: $rc"
+    echo "时间: $(ts)"
+    echo "目标: $TARGETS"
+    echo "主机: $(hostname)  vCPU=$(nproc)  MEM=${MEM_GB}G"
+    echo "工作目录: $WORK"
+    echo
+    echo "===== $name 日志尾部 80 行 ====="
+    tail -80 "$LOGS/$name.log" 2>/dev/null || echo '(无日志)'
+  } > "$WORK/diag/LAST_ERROR.txt" 2>/dev/null || true
+  push_diag "$name" || true
+}
+
+# 只推日志（不依赖结果目录/体积守卫），保证诊断信息能出来
+push_diag() {
+  local name="$1"
+  [ -n "$GH_TOKEN" ] || { say "（无 GH_TOKEN，跳过诊断上传）"; return 1; }
+  local D="/tmp/diagpush"
+  rm -rf "$D"; mkdir -p "$D/logs" "$D/diag"
+  cp -r "$LOGS"/. "$D/logs/" 2>/dev/null || true
+  cp -r "$WORK/diag"/. "$D/diag/" 2>/dev/null || true
+  cd "$D" || return 1
+  git init -q
+  git config user.email "bot@localhost"; git config user.name "lean-measure bot"
+  git checkout -q -b "diag-${HOST_TAG}-$(date -u +%m%d-%H%M%S)"
+  git add -f logs diag 2>/dev/null || true
+  git commit -q -m "诊断: $name 失败 @ $(ts)" 2>/dev/null || return 1
+  git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" HEAD 2>&1 | tail -3 || return 1
+  say "诊断日志已推送（分支 diag-*）"
 }
 
 # ════════════════════════════════════════════════════════════════
@@ -447,7 +500,6 @@ if [ "$PHASE" = "__selfterm" ]; then selfterm; exit 0; fi
 acquire_lock
 trap release_lock EXIT INT TERM
 
-HOST_TAG="$(hostname 2>/dev/null | tr -cd 'a-zA-Z0-9' | head -c 12)"; [ -z "$HOST_TAG" ] && HOST_TAG=pod
 RESULT_BRANCH="${LCM_RESULT_BRANCH:-results-${HOST_TAG}-$(date -u +%m%d-%H%M%S)}"
 
 DEADLINE_H="${LCM_DEADLINE_HOURS:-24}"
@@ -520,13 +572,21 @@ $MOUNTS"
     FAILED=0
     run_stage toolchain do_toolchain || FAILED=1
     if [ $FAILED -eq 0 ]; then
+      # 某个目标失败时【不中断】后面的目标：两个目标是独立的（OAI 自带 pinned
+      # mathlib），而且失败信息都希望能传回来。只记录 FAILED。
       for t in $TARGETS; do
         say "════════ 目标: $t ════════"
-        run_stage "deps-$t"    do_deps    "$t" || { FAILED=1; break; }
-        run_stage "build-$t"   do_build   "$t" || { FAILED=1; break; }
-        run_stage "measure-$t" do_measure "$t" || { FAILED=1; break; }
+        local tf=0
+        run_stage "deps-$t"    do_deps    "$t" || tf=1
+        run_stage "build-$t"   do_build   "$t" || tf=1
+        run_stage "measure-$t" do_measure "$t" || tf=1
         do_upload >/dev/null 2>&1 || true
-        say "════════ $t 完成 ════════"
+        if [ $tf -eq 0 ]; then
+          say "════════ $t 完成 ════════"
+        else
+          say "════════ $t 未完成（详情见 $LOGS/*$t.log）════════"
+          FAILED=1
+        fi
       done
     fi
     do_upload || say "最终上传失败"

@@ -90,6 +90,22 @@ bash -c "curl -fsSL https://raw.githubusercontent.com/lxingrui/lean-measure/main
 
 `measures.jsonl` 在跑完后自动 gzip，`<目标>` 为 `mathlib` / `oai`。
 
+### 失败时会发生什么
+
+任一阶段失败时，会**立刻**做三件事，保证报错不丢：
+
+1. 日志尾部 50 行打印到容器日志
+2. 完整现场写入 `diag/LAST_ERROR.txt`，并**单独推一个 `diag-*` 分支**
+   （只含 `logs/` 与 `diag/`，不依赖结果目录与体积守卫）
+3. 飞书收到 ❌ 通知，带**退出码**与日志尾部 40 行
+
+某个目标失败**不会中断**后面的目标 —— 两个目标是独立的（OAI 自带 pinned mathlib），
+失败信息都会传回来。
+
+> ⚠️ 曾有一个吞错的坑：`if ! cmd 2>&1 | tee log` 测的是 `tee` 的退出码，
+> 而 `tee` 永远成功，于是失败永远检不出来（表现为"阶段完成"但仓库里没产物）。
+> 现在先捕获命令自身的退出码再 `tee`。
+
 ## 分阶段重跑
 
 SSH 或 Web Terminal 里：
