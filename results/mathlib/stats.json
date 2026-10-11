@@ -1,0 +1,54 @@
+{
+ "label": "mathlib OAI/Analysis/Crouzeix",
+ "declarations": 327627,
+ "depth": {
+  "min": 0,
+  "median": 3,
+  "mean": 10.109,
+  "max": 86
+ },
+ "log2Unwrapped": {
+  "min": 0,
+  "p10": 0,
+  "median": 8.401,
+  "p90": 30.382,
+  "max": 75.184
+ },
+ "fit": {
+  "slope_bits_per_level": 0.7827,
+  "intercept": 3.5793,
+  "r": 0.936,
+  "residual_sigma": 4.2766,
+  "three_sigma": 12.8299
+ },
+ "outliers": {
+  "above": 3054,
+  "below": 461
+ },
+ "segment_slopes": {
+  "0-3": {
+   "n": 167433,
+   "slope": 2.9514
+  },
+  "4-8": {
+   "n": 47229,
+   "slope": 1.0634
+  },
+  "9-15": {
+   "n": 26779,
+   "slope": 0.6587
+  },
+  "16-25": {
+   "n": 43670,
+   "slope": 0.4508
+  },
+  "26-40": {
+   "n": 20386,
+   "slope": 0.6067
+  },
+  "41-max": {
+   "n": 22130,
+   "slope": 0.4579
+  }
+ }
+}
