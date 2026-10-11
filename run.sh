@@ -436,7 +436,15 @@ do_upload() {
   while IFS= read -r f; do
     [ -e "$f" ] || continue
     local rel="${f#$RES/}" base; base="$(basename "$f")"
-    [ -n "$EXCLUDE" ] && [ "$base" = "$EXCLUDE" ] && { say "  排除 $rel"; continue; }
+    # refs.* 是中间产物，默认不推（大领域可达 GB 级）。
+    # 注意：sizeguard 只打印 [skip]，不会替这里做决定，必须自己判断。
+    case "$base" in
+      refs.tsv|refs.tsv.gz)
+        if [ "${LCM_PUSH_REFS:-0}" != "1" ]; then
+          say "  跳过 $rel（中间产物，LCM_PUSH_REFS=1 才推）"; continue
+        fi ;;
+    esac
+    [ -n "$EXCLUDE" ] && [ "$base" = "$EXCLUDE" ] && { say "  排除 $rel（超单文件上限）"; continue; }
     mkdir -p "$STAGE/results/$(dirname "$rel")"
     cp "$f" "$STAGE/results/$rel" 2>/dev/null || true
   done < <(find "$RES" -type f 2>/dev/null)

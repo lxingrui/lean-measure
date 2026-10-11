@@ -161,6 +161,27 @@ mathlib 的 `measure` 一失败就跳出整个循环，**OAI 一步都没跑**�
 **修法**：改为记录 `tf` 后**继续下一个目标**（两个目标独立，OAI 自带 pinned mathlib），
 失败信息都传回来。
 
+### C-6 `refs.tsv` 被推上去了，尽管 sizeguard 说 skip
+
+**症状**：体积检查明明打印 `[skip] refs.* 中间产物`，但仓库里出现了 `refs.tsv`。
+
+**根因**：`sizeguard.mjs` 只是**打印**跳过信息，**不会替上传逻辑做决定**；
+而暂存循环只按 `\`（仅在超限时被设为 `measures.jsonl.gz`）排除文件，
+对 `refs.*` 没有任何判断 → 照推。
+
+**修法**：暂存循环自己判断 —— 文件名是 `refs.tsv`/`refs.tsv.gz` 且
+`LCM_PUSH_REFS != 1` 就跳过。
+**教训**：校验脚本的输出如果没有被调用方消费，就只是日志，不是约束。
+
+### C-7 本机测试装置踩的坑（不属于产品代码，但值得记）
+
+- **WSL 不能用**：本机 WSL 是 NAT 网络，实测直连 github 100% 超时
+  （curl 返回 000、git 报 `GnuTLS recv error (-110)`）。改用 **Git Bash**（走 Windows 网络栈）正常。
+- **本机有两个 WSL 发行版**（`TTC-study` 是默认、`Ubuntu` 是另一个），
+  `wsl` 不带 `-d Ubuntu` 会进错发行版，导致 `pkill` / `--terminate` 打空。
+- 测试装置必须**预置 mock 仓库**（`\/mathlib4`、`\/oai` 已含 `.git`），
+  否则 `deps` 阶段会去真克隆 mathlib4 与 openai/math（1.5 GB），测试要等很久。
+
 ---
 
 ## D. 部署与凭证
