@@ -1,0 +1,11 @@
+info: leanprover-community/plausible: fetching revision 'main' from https://github.com/leanprover-community/plausible
+info: leanprover-community/LeanSearchClient: fetching revision 'main' from https://github.com/leanprover-community/LeanSearchClient
+info: leanprover-community/importGraph: fetching revision 'main' from https://github.com/leanprover-community/import-graph
+info: leanprover-community/importGraph: checking out revision '80a81552bef492cc13d69cc7abddb61c29abbba3'
+info: leanprover-community/proofwidgets: fetching revision 'main' from https://github.com/leanprover-community/ProofWidgets4
+info: leanprover-community/aesop: fetching revision 'master' from https://github.com/leanprover-community/aesop
+info: leanprover-community/Qq: fetching revision 'master' from https://github.com/leanprover-community/quote4
+info: leanprover-community/batteries: fetching revision 'main' from https://github.com/leanprover-community/batteries
+info: leanprover-community/batteries: checking out revision '3f3396e8b5936a434cdcb42bf59ebd5c51f730a5'
+info: toolchain not updated; already up-to-date
+info: mathlib: running post-update hooks
