@@ -110,27 +110,58 @@ release_lock() { [ "$(cat "$LOCK_DIR/pid" 2>/dev/null)" = "$$" ] && rm -rf "$LOC
 
 # ════════════════════════════════════════════════════════════════
 # 自动关机
-#   RUNPOD_POD_ID 由 RunPod 运行时自动注入，无需设置
-#   给了 RUNPOD_API_KEY 就真正删除 Pod；否则 kill 1 让容器退出
+#
+# ⚠️ 关键教训：kill 1 只是让容器主进程退出，**RunPod 会按重启策略把容器
+#    再拉起来** —— 结果是无限循环重启（实测每 15 秒一轮），而不是关机。
+#    所以唯一可靠的关机方式是调 RunPod API 【删除 Pod】。
+#
+#   RUNPOD_POD_ID  由 RunPod 运行时自动注入，无需设置
+#   RUNPOD_API_KEY 必须提供，否则删不了 Pod（RunPod → Settings → API Keys）
+#   LCM_KEEPALIVE=1  跑完不关机、保留现场（调试用）
+#
+# 拿不到 key 时只做 kill 1，并明确警告它会触发重启循环。
 # ════════════════════════════════════════════════════════════════
 selfterm() {
+  if [ "${LCM_KEEPALIVE:-0}" = "1" ]; then
+    say "LCM_KEEPALIVE=1：不关机，Pod 保留现场供排查"
+    return 0
+  fi
   if [ "${LCM_SELFTERM:-1}" = "0" ]; then
     say "LCM_SELFTERM=0，跳过自动关机（记得手动删 Pod）"; return 0
   fi
-  local pid="${RUNPOD_POD_ID:-}" key="${RUNPOD_API_KEY:-}" need_fallback=1
-  if [ -n "$key" ] && [ -n "$pid" ]; then
-    say "自动关机：DELETE /v1/pods/$pid"
-    local code
-    code=$(curl -sS -o /tmp/rp_del.txt -w '%{http_code}' --max-time 30 \
-      -X DELETE "https://rest.runpod.io/v1/pods/${pid}" \
-      -H "Authorization: Bearer ${key}" 2>/dev/null || echo 000)
-    say "  HTTP $code  $(head -c 200 /tmp/rp_del.txt 2>/dev/null)"
-    case "$code" in 200|204) need_fallback=0 ;; esac
-  else
-    say "自动关机：无 RUNPOD_API_KEY，走 kill 1 兜底"
+
+  local pid="${RUNPOD_POD_ID:-}" key="${RUNPOD_API_KEY:-}"
+
+  if [ -z "$key" ]; then
+    say "────────────────────────────────────────────────────────"
+    say "⚠️ 未提供 RUNPOD_API_KEY，无法删除 Pod。"
+    say "   只能 kill 1，而 RunPod 会按重启策略把容器再拉起来 ——"
+    say "   这会导致【无限循环重启】（实测每 15 秒一轮），不是关机。"
+    say "   两个解决办法（任选其一）："
+    say "     a) 加环境变量 RUNPOD_API_KEY=<你的 RunPod API Key>"
+    say "     b) 在 RunPod 控制台把本 Pod 的重启策略设为不重启"
+    say "────────────────────────────────────────────────────────"
+    say "自动关机：kill 1（会触发重启循环，请手动删 Pod）"
+    sync; sleep 3; kill 1 2>/dev/null || true
+    return 0
   fi
-  [ $need_fallback -ne 0 ] && say "自动关机：kill 1"
-  sync; sleep 3; kill 1 2>/dev/null || true
+
+  if [ -z "$pid" ]; then
+    say "⚠️ RUNPOD_POD_ID 为空（非 RunPod 环境？），跳过删除"
+    return 0
+  fi
+
+  say "自动关机：DELETE https://rest.runpod.io/v1/pods/$pid"
+  local code
+  code=$(curl -sS -o /tmp/rp_del.txt -w '%{http_code}' --max-time 30 \
+    -X DELETE "https://rest.runpod.io/v1/pods/${pid}" \
+    -H "Authorization: Bearer ${key}" 2>/dev/null || echo 000)
+  say "  HTTP $code  $(head -c 300 /tmp/rp_del.txt 2>/dev/null)"
+  case "$code" in
+    200|204) say "Pod 删除请求已接受，即将随容器一起消失"; sleep 20 ;;
+    *) say "⚠️ 删除失败（HTTP $code）。改用 kill 1 兜底 —— 注意这可能触发重启循环。"
+       sync; sleep 3; kill 1 2>/dev/null || true ;;
+  esac
 }
 
 # ════════════════════════════════════════════════════════════════
@@ -256,9 +287,29 @@ do_measure() {
   node "$APP/subst_template.mjs" "$APP/measure.lean" "$PROJ/MeasureRefs.lean" "$ROOT_MODULE" "$TSV" \
     || die "[$t] 模板替换失败"
 
+  # 显式落一次依赖，确保 .lake/packages 齐全（否则 lake env lean 会加载失败）
+  say "[$t] lake update（确保依赖齐全）"
+  ( cd "$PROJ" && lake update ) > "$LOGS/$t-lakeupdate.log" 2>&1 \
+    || say "[$t] ⚠️ lake update 返回非零，继续（详情见 $LOGS/$t-lakeupdate.log）"
+
+  say "[$t] 确认根模块可加载: $ROOT_MODULE"
+  ( cd "$PROJ" && lake env lean --version ) >/dev/null 2>&1 \
+    || die "[$t] lake env 不可用（依赖没装好？）"
+
   say "[$t] elaboration 抽取（单线程遍历，可能几十分钟）"
   cd "$PROJ" || die "[$t] 目录不存在"
-  lake env lean "$PROJ/MeasureRefs.lean" || die "[$t] lean 抽取失败"
+  # 把完整输出都打到阶段日志里：Lean 的报错全部在 stderr，被吞掉就没法排查
+  local rc=0
+  leandbg="$(mktemp)"
+  lake env lean "$PROJ/MeasureRefs.lean" >"$leandbg" 2>&1 || rc=$?
+  cat "$leandbg"
+  if [ $rc -ne 0 ]; then
+    say "──── Lean 输出（last 40 行）────"
+    tail -40 "$leandbg"
+    say "────────────────────────────────"
+    die "[$t] lean 抽取失败，退出码 $rc"
+  fi
+  rm -f "$leandbg"
   [ -s "$TSV" ] || die "[$t] refs.tsv 不存在或为空"
 
   local ROWS; ROWS=$(wc -l < "$TSV")
@@ -357,6 +408,21 @@ preflight() {
     say "并发: JOBS=$JOBS（手动）"
   fi
   say "看门狗: ${DEADLINE_H}h"
+
+  # 提前把"关不了机"这件事说清楚，别等跑完才发现
+  if [ "${LCM_KEEPALIVE:-0}" = "1" ]; then
+    say "关机: 已关闭（LCM_KEEPALIVE=1），Pod 会保留，记得手动删"
+  elif [ "${LCM_SELFTERM:-1}" = "0" ]; then
+    say "关机: 已关闭（LCM_SELFTERM=0），记得手动删 Pod"
+  elif [ -z "${RUNPOD_API_KEY:-}" ]; then
+    say "────────────────────────────────────────────────────────"
+    say "⚠️ 没设 RUNPOD_API_KEY —— 跑完只能 kill 1，而 RunPod 会重启容器，"
+    say "   会造成【无限循环重启】而不是关机。"
+    say "   现在补上还来得及：给本 Pod 加环境变量 RUNPOD_API_KEY"
+    say "────────────────────────────────────────────────────────"
+  else
+    say "关机: 跑完调 RunPod API 删除本 Pod"
+  fi
 
   if [ "$OAI_FULL" = "1" ] && [ "$AVAIL_GB" -lt 110 ]; then
     die "全量 OAI 需约 110G，当前仅 ${AVAIL_GB}G"

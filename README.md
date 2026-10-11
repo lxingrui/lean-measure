@@ -25,8 +25,31 @@ bash -c "curl -fsSL https://raw.githubusercontent.com/lxingrui/lean-measure/main
 | 变量 | 必需 | 说明 |
 |---|---|---|
 | `GITHUB_TOKEN` | ✅ | Fine-grained PAT，`Contents: Read and write`，只授权本仓库 |
+| **`RUNPOD_API_KEY`** | ✅ | **自动关机用**，见下 |
 | `FEISHU_WEBHOOK` | 可选 | 飞书自定义机器人 webhook |
 | `FEISHU_SECRET` | 可选 | 机器人开了签名校验时必填 |
+
+### 为什么必须要 `RUNPOD_API_KEY`
+
+⚠️ **`kill 1` 关不掉 Pod。** 它只是让容器主进程退出，而 RunPod 会按重启策略
+**把容器再拉起来** —— 结果是**无限循环重启**（实测每 15 秒一轮），不是关机。
+
+唯一可靠的自动关机方式是调 RunPod API **删除 Pod**。所以：
+
+1. 打开 https://www.runpod.io/console/user/settings → **API Keys** → 新建
+2. 作为环境变量 `RUNPOD_API_KEY` 加到 Pod 上
+
+`RUNPOD_POD_ID` 由 RunPod 运行时自动注入，**不需要你设**。
+
+> 不想给这个 key，就在 RunPod 控制台把 Pod 的**重启策略设为不重启**，
+> 这样 `kill 1` 才能真正结束它。否则脚本会明确警告并仍然尝试 `kill 1`。
+
+### 调试时保留现场
+
+| 变量 | 作用 |
+|---|---|
+| `LCM_KEEPALIVE=1` | 跑完**不关机**，Pod 保留，可以 SSH 进去查 |
+| `LCM_SELFTERM=0` | 同上（语义更明确） |
 
 **不需要设目标、子树、并发** —— 都在代码里有默认值：
 
