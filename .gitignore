@@ -1,0 +1,16 @@
+# 凭证：绝不提交。只通过运行时环境变量注入。
+.env
+.env.local
+.env.*.local
+secrets*
+*.token
+*.pem
+
+# 但示例文件要提交（里面全是占位符）
+!.env.example
+
+# 运行产物（结果推 GitHub 分支，不进 main）
+results/
+logs/
+work/
+*.log
