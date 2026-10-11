@@ -1,0 +1,103 @@
+[2026-10-11T08:21:50Z] [oai] 生成 MeasureRefs.lean（根模块 OAI.Analysis.Crouzeix.Main）
+[subst] 路径替换 2 处，反引号模块名 1 处，import 1 处
+[subst] 结果首行: import OAI.Analysis.Crouzeix.Main
+[subst] #eval 行:  #eval go "/work/results/oai/refs.tsv" `OAI.Analysis.Crouzeix.Main
+[2026-10-11T08:21:50Z] [oai] lake update（确保依赖齐全）
+[2026-10-11T08:22:27Z] [oai] 确认根模块可加载: OAI.Analysis.Crouzeix.Main
+[2026-10-11T08:22:29Z] [oai] elaboration 抽取（单线程遍历，可能几十分钟）
+warning: PrimeNumberTheoremAnd: repository '/work/oai/lean/.lake/packages/PrimeNumberTheoremAnd' has local changes
+warning: belyi: repository '/work/oai/lean/.lake/packages/belyi' has local changes
+warning: formal-schemes: repository '/work/oai/lean/.lake/packages/formal-schemes' has local changes
+warning: elliptic-curves: repository '/work/oai/lean/.lake/packages/elliptic-curves' has local changes
+warning: tempered-fundamental-groups: repository '/work/oai/lean/.lake/packages/tempered-fundamental-groups' has local changes
+warning: oka: repository '/work/oai/lean/.lake/packages/oka' has local changes
+warning: orbicurve-cores: repository '/work/oai/lean/.lake/packages/orbicurve-cores' has local changes
+warning: pi1: repository '/work/oai/lean/.lake/packages/pi1' has local changes
+warning: heights: repository '/work/oai/lean/.lake/packages/heights' has local changes
+warning: genl: repository '/work/oai/lean/.lake/packages/genl' has local changes
+warning: tate-curves-theta: repository '/work/oai/lean/.lake/packages/tate-curves-theta' has local changes
+warning: iut: repository '/work/oai/lean/.lake/packages/iut' has local changes
+warning: gromov: repository '/work/oai/lean/.lake/packages/gromov' has local changes
+warning: SphereEversion: repository '/work/oai/lean/.lake/packages/SphereEversion' has local changes
+warning: schoenflies-lean: repository '/work/oai/lean/.lake/packages/schoenflies-lean' has local changes
+warning: ClassFieldTheory: repository '/work/oai/lean/.lake/packages/ClassFieldTheory' has local changes
+warning: AINTLIB: repository '/work/oai/lean/.lake/packages/AINTLIB' has local changes
+warning: AbsorptionCutoff: repository '/work/oai/lean/.lake/packages/AbsorptionCutoff' has local changes
+warning: StrongPNT: repository '/work/oai/lean/.lake/packages/StrongPNT' has local changes
+warning: carleson: repository '/work/oai/lean/.lake/packages/carleson' has local changes
+warning: rellich-kondrachov: repository '/work/oai/lean/.lake/packages/rellich-kondrachov' has local changes
+warning: Zeta3Irrational: repository '/work/oai/lean/.lake/packages/Zeta3Irrational' has local changes
+warning: fixed-point-theorems: repository '/work/oai/lean/.lake/packages/fixed-point-theorems' has local changes
+环境加载: 8349 ms
+  源声明 50000, 边 896784
+  源声明 100000, 边 1790076
+  源声明 150000, 边 2695990
+  源声明 200000, 边 3592187
+完成: 环境常量 785352, 有定义体的声明 214271
+      可展开目标引用 2346187, primitive 目标引用 1506236
+      带权边总数 3852423
+输出: /work/results/oai/refs.tsv
+[2026-10-11T08:24:50Z] [oai] refs.tsv 行数: 3852423
+[2026-10-11T08:24:50Z] [oai] 后处理：depth / unwrapped / wrapped
+[0s] 读取 TSV…
+[2s] 读入 3,852,423 条带权边, 312,822 个声明, 堆 1220 MB
+[2s] 建 CSR…
+[3s]   CSR 完成, 堆 1272 MB
+[3s] Tarjan 求 SCC…
+[3s]   SCC 数 312445, 堆 1242 MB
+[3s] SCC 层拓扑序…
+[3s]   拓扑序 312445/312445 ✓ 全覆盖
+[4s] 落盘 measures.jsonl…
+[4s] 回归与汇总…
+
+================ 测量结果 ================
+{
+ "declarations": 312822,
+ "weightedEdges": 3852423,
+ "primitiveRefs": 1506235,
+ "scc": 312445,
+ "depth": {
+  "median": 3,
+  "mean": 9.866,
+  "max": 86
+ },
+ "log2Unwrapped": {
+  "median": 8.229,
+  "mean": 11.518,
+  "max": 75.284
+ },
+ "fit": {
+  "slope_bits_per_level": 0.8066,
+  "intercept": 3.5597,
+  "residual_sigma": 4.2902,
+  "three_sigma": 12.8705,
+  "r": 0.9382,
+  "n": 312822
+ },
+ "outliers": {
+  "above_3sigma": 2635,
+  "below_3sigma": 454
+ },
+ "paper_reference": {
+  "slope_reported": "~1 bit per level of depth",
+  "note": "本实现与论文口径一致：Expr 遍历、primitive=无定义体、depth=最长路"
+ }
+}
+
+结果写入: /work/results/oai/summary.json, /work/results/oai/measures.jsonl
+用时 4s, 峰值堆 879 MB
+[2026-10-11T08:24:54Z] [oai] 生成可喂 AI 的报告
+[0s] 读取…
+[0s] 312,822 条声明
+[0s] 建立声明名 -> 文件 索引（供附源码用）…
+[36s]   索引到 5 / 50 条离群点源码位置
+[36s] 产出:
+[36s]   report.md                  15.3 KB   ≈5,238 token
+[36s]   depth_stats.csv             2.7 KB   ≈910 token
+[36s]   outliers.csv               41.5 KB   ≈14,180 token
+[36s]   module_clusters.csv         4.8 KB   ≈1,654 token
+[36s]   stats.json                  0.7 KB   ≈253 token
+[36s]   合计                       65.1 KB   ≈22,235 token
+[36s] （全量原始数据在 measures.jsonl 里，25.4 MB —— 那是给人复算的，别喂模型）
+[36s] 完成
+[2026-10-11T08:25:30Z] [oai] 完成：312822 条声明
