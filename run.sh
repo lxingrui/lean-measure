@@ -111,38 +111,39 @@ release_lock() { [ "$(cat "$LOCK_DIR/pid" 2>/dev/null)" = "$$" ] && rm -rf "$LOC
 # ════════════════════════════════════════════════════════════════
 # 自动关机
 #
-# ⚠️ 关键教训：kill 1 只是让容器主进程退出，**RunPod 会按重启策略把容器
-#    再拉起来** —— 结果是无限循环重启（实测每 15 秒一轮），而不是关机。
-#    所以唯一可靠的关机方式是调 RunPod API 【删除 Pod】。
+# ⚠️ 两次踩坑的结论：
+#   1. kill 1 只是让容器主进程退出，RunPod 会把容器【再拉起来】——
+#      造成无限循环重启（实测每 15 秒一轮），把 SSH 都挤掉，根本进不去。
+#   2. RunPod 的预期模型是主进程【不要退出】（官方文档建议用 sleep infinity
+#      保持容器存活）。所以 kill 1 属于未定义行为，不能依赖。
 #
-#   RUNPOD_POD_ID  由 RunPod 运行时自动注入，无需设置
-#   RUNPOD_API_KEY 必须提供，否则删不了 Pod（RunPod → Settings → API Keys）
-#   LCM_KEEPALIVE=1  跑完不关机、保留现场（调试用）
+# 因此本版规则：
+#   · 首选：调 RunPod API DELETE /v1/pods/<id> —— 唯一可靠的关机方式
+#   · 没有 API key：【什么也不做】，保留容器，让 SSH 还能进去
+#     并且明确告诉用户"需要手动删"
+#   · 绝不 kill 1
 #
-# 拿不到 key 时只做 kill 1，并明确警告它会触发重启循环。
+#   RUNPOD_POD_ID   由 RunPod 运行时自动注入
+#   RUNPOD_API_KEY  RunPod → Settings → API Keys
+#   LCM_KEEPALIVE=1 明确要求保留 Pod（调试）
 # ════════════════════════════════════════════════════════════════
 selfterm() {
   if [ "${LCM_KEEPALIVE:-0}" = "1" ]; then
-    say "LCM_KEEPALIVE=1：不关机，Pod 保留现场供排查"
-    return 0
+    say "LCM_KEEPALIVE=1：保留 Pod（SSH 可用，记得手动删）"; return 0
   fi
-  if [ "${LCM_SELFTERM:-1}" = "0" ]; then
-    say "LCM_SELFTERM=0，跳过自动关机（记得手动删 Pod）"; return 0
-  fi
-
   local pid="${RUNPOD_POD_ID:-}" key="${RUNPOD_API_KEY:-}"
 
   if [ -z "$key" ]; then
     say "────────────────────────────────────────────────────────"
-    say "⚠️ 未提供 RUNPOD_API_KEY，无法删除 Pod。"
-    say "   只能 kill 1，而 RunPod 会按重启策略把容器再拉起来 ——"
-    say "   这会导致【无限循环重启】（实测每 15 秒一轮），不是关机。"
-    say "   两个解决办法（任选其一）："
-    say "     a) 加环境变量 RUNPOD_API_KEY=<你的 RunPod API Key>"
-    say "     b) 在 RunPod 控制台把本 Pod 的重启策略设为不重启"
+    say "⚠️ 未提供 RUNPOD_API_KEY，无法自动关机。"
+    say "   本版【不会】用 kill 1 兜底 —— 那会导致无限循环重启，"
+    say "   把 SSH 都挤掉，反而更糟。"
+    say "   Pod 保持运行，请手动删除；或加环境变量 RUNPOD_API_KEY"
+    say "   （RunPod → Settings → API Keys）下次即可自动关机。"
     say "────────────────────────────────────────────────────────"
-    say "自动关机：kill 1（会触发重启循环，请手动删 Pod）"
-    sync; sleep 3; kill 1 2>/dev/null || true
+    notify warn "lean-measure 需要手动删 Pod" \
+      "原因: 未配置 RUNPOD_API_KEY，无法自动关机
+Pod 仍在运行并计费。请到控制台删除，或补上 RUNPOD_API_KEY。"
     return 0
   fi
 
@@ -151,17 +152,23 @@ selfterm() {
     return 0
   fi
 
-  say "自动关机：DELETE https://rest.runpod.io/v1/pods/$pid"
-  local code
-  code=$(curl -sS -o /tmp/rp_del.txt -w '%{http_code}' --max-time 30 \
-    -X DELETE "https://rest.runpod.io/v1/pods/${pid}" \
-    -H "Authorization: Bearer ${key}" 2>/dev/null || echo 000)
-  say "  HTTP $code  $(head -c 300 /tmp/rp_del.txt 2>/dev/null)"
-  case "$code" in
-    200|204) say "Pod 删除请求已接受，即将随容器一起消失"; sleep 20 ;;
-    *) say "⚠️ 删除失败（HTTP $code）。改用 kill 1 兜底 —— 注意这可能触发重启循环。"
-       sync; sleep 3; kill 1 2>/dev/null || true ;;
-  esac
+  # 重试若干次：网络抖动很常见，删不掉就会一直计费
+  local i code
+  for i in 1 2 3 4 5; do
+    say "自动关机：DELETE https://rest.runpod.io/v1/pods/$pid （第 $i 次）"
+    code=$(curl -sS -o /tmp/rp_del.txt -w '%{http_code}' --max-time 30 \
+      -X DELETE "https://rest.runpod.io/v1/pods/${pid}" \
+      -H "Authorization: Bearer ${key}" 2>/dev/null || echo 000)
+    say "  HTTP $code  $(head -c 300 /tmp/rp_del.txt 2>/dev/null)"
+    case "$code" in
+      200|204) say "✅ Pod 删除请求已接受，容器即将消失"; sleep 30; return 0 ;;
+      401) say "❌ 401 Unauthorized —— RUNPOD_API_KEY 无效。保留 Pod，请手动删。"; return 0 ;;
+      400|404) say "❌ $code —— RUNPOD_POD_ID 不被 RunPod 接受（'$pid'）。保留 Pod，请手动删。"; return 0 ;;
+    esac
+    sleep 10
+  done
+  say "⚠️ 5 次都失败。保留 Pod（不会 kill 1），请手动删。"
+  notify fail "自动关机失败" "DELETE /v1/pods/$pid 连续 5 次失败，Pod 仍在计费，请手动删除。"
 }
 
 # ════════════════════════════════════════════════════════════════
@@ -411,14 +418,12 @@ preflight() {
 
   # 提前把"关不了机"这件事说清楚，别等跑完才发现
   if [ "${LCM_KEEPALIVE:-0}" = "1" ]; then
-    say "关机: 已关闭（LCM_KEEPALIVE=1），Pod 会保留，记得手动删"
-  elif [ "${LCM_SELFTERM:-1}" = "0" ]; then
-    say "关机: 已关闭（LCM_SELFTERM=0），记得手动删 Pod"
+    say "关机: 保留 Pod（LCM_KEEPALIVE=1），SSH 可用，记得手动删"
   elif [ -z "${RUNPOD_API_KEY:-}" ]; then
     say "────────────────────────────────────────────────────────"
-    say "⚠️ 没设 RUNPOD_API_KEY —— 跑完只能 kill 1，而 RunPod 会重启容器，"
-    say "   会造成【无限循环重启】而不是关机。"
-    say "   现在补上还来得及：给本 Pod 加环境变量 RUNPOD_API_KEY"
+    say "⚠️ 没设 RUNPOD_API_KEY —— 跑完【不会】自动关机。"
+    say "   本版不会用 kill 1 兜底（那会造成无限重启循环，把 SSH 挤掉）。"
+    say "   Pod 会保持运行并计费，请手动删；或补上 RUNPOD_API_KEY 后下次生效。"
     say "────────────────────────────────────────────────────────"
   else
     say "关机: 跑完调 RunPod API 删除本 Pod"
@@ -453,6 +458,41 @@ if [ "$DEADLINE_H" != "0" ] && [ "${LCM_SELFTERM:-1}" != "0" ]; then
   ) &
   WATCHDOG_PID=$!
   say "看门狗已武装: ${DEADLINE_H}h 后强制关机（pid $WATCHDOG_PID）"
+fi
+
+# ════════════════════════════════════════════════════════════════
+# 启动循环熔断
+#   容器反复重启会一边烧钱一边把 SSH 挤掉，人根本进不去。
+#   这里记录每次启动时间（持久化在 /work，容器重启后仍在），
+#   短时间内反复启动就【拒绝干活并保持存活】，把控制权交回给人。
+# ════════════════════════════════════════════════════════════════
+BOOT_LOG="$WORK/.boots"
+echo "$(date +%s)" >> "$BOOT_LOG" 2>/dev/null || true
+if [ -f "$BOOT_LOG" ]; then
+  NOW=$(date +%s)
+  awk -v now="$NOW" '$1 > now-600' "$BOOT_LOG" > "$BOOT_LOG.tmp" 2>/dev/null && mv "$BOOT_LOG.tmp" "$BOOT_LOG"
+  RECENT=$(wc -l < "$BOOT_LOG" 2>/dev/null || echo 1)
+  say "启动计数（近 10 分钟）: $RECENT"
+  if [ "$RECENT" -ge 3 ] && [ "${LCM_IGNORE_BOOTLOOP:-0}" != "1" ]; then
+    say "════════════════════════════════════════════════════════"
+    say "❌ 检测到启动循环：近 10 分钟内启动了 $RECENT 次。"
+    say "   典型原因是上次结束时容器退出、被 RunPod 重新拉起。"
+    say "   为止损，本次【不执行任何任务】，保持容器存活等人工处理。"
+    say ""
+    say "   处理办法（任选）："
+    say "     1. 去 RunPod 控制台删掉本 Pod"
+    say "     2. rm -f $BOOT_LOG 后重跑"
+    say "     3. 设 LCM_IGNORE_BOOTLOOP=1 强制忽略"
+    say "════════════════════════════════════════════════════════"
+    notify fail "lean-measure 启动循环已熔断" \
+      "近 10 分钟内启动了 $RECENT 次，已停止执行任务以止损。
+Pod 保持存活（SSH 可用）。请删掉 Pod，或 SSH 进去执行：
+    rm -f $BOOT_LOG
+然后重跑。"
+    [ -n "${WATCHDOG_PID:-}" ] && kill "$WATCHDOG_PID" 2>/dev/null || true
+    release_lock
+    exec sleep infinity          # 保持存活，让 SSH 有办法进来
+  fi
 fi
 
 preflight
